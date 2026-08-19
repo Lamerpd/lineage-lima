@@ -1,0 +1,36 @@
+name: Search Motorola MTK Kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone Motorola kernel repository
+        run: |
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/MotorolaMobilityLLC/kernel-mtk.git kernel-mtk
+
+      - name: Search refs and history
+        working-directory: kernel-mtk
+        run: |
+          echo "=== BRANCHES ==="
+          git branch -a
+
+          echo
+          echo "=== TAGS RELEVANTES ==="
+          git tag -l | grep -Ei 'lima|mt6771|4\.14' | head -n 100 || true
+
+          echo
+          echo "=== COMMITS COM LIMA ==="
+          git log --all --oneline --grep='lima' -i -n 100 || true
+
+          echo
+          echo "=== COMMITS COM MT6771 ==="
+          git log --all --oneline --grep='mt6771' -i -n 100 || true
+
+          echo
+          echo "=== COMMITS COM 4.14.141 ==="
+          git log --all --oneline --grep='4\.14\.141' -i -n 100 || true
