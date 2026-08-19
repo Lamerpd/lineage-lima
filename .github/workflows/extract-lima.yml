@@ -20,29 +20,24 @@ jobs:
             refs/tags/MMI-PMD29.70-81-lima:refs/tags/MMI-PMD29.70-81-lima
           git checkout MMI-PMD29.70-81-lima
 
-      - name: Inspect Lima tree
+      - name: Extract real Lima files
         working-directory: kernel-mtk
         run: |
-          echo "=== LIMA FILES ==="
-          git ls-tree -r HEAD --name-only | grep -Ei 'mt6771.*lima|lima.*mt6771' || true
+          set -e
+
+          mkdir -p ../lima-source/arch/arm/boot/dts
+          mkdir -p ../lima-source/arch/arm64/boot/dts/mediatek
+          mkdir -p ../lima-source/arch/arm/configs/ext_config
+
+          echo "=== BASE FILES ==="
+
+          git show HEAD:arch/arm/boot/dts/mt6771.dts \
+            > ../lima-source/arch/arm/boot/dts/mt6771.dts
+
+          git show HEAD:arch/arm/configs/ext_config/lima.config \
+            > ../lima-source/arch/arm/configs/ext_config/lima.config
 
           echo "=== LIMA SYMLINKS ==="
-          find arch/arm/boot/dts -maxdepth 1 -type l -name '*lima*' -exec ls -l {} \; || true
-
-          echo "=== ARM64 TARGETS ==="
-          git ls-tree -r HEAD --name-only | grep 'arch/arm64/boot/dts/mediatek/.*lima' || true
-
-      - name: Extract Lima files
-        working-directory: kernel-mtk
-        run: |
-          mkdir -p ../lima-source
-
-          git archive HEAD \
-            arch/arm/boot/dts/mt6771.dts \
-            arch/arm/configs/ext_config/lima.config \
-            | tar -x -C ../lima-source
-
-          echo "=== RESOLVING LIMA SYMLINK TARGETS ==="
 
           for file in \
             mt6771-moto-main-lima.dtsi \
@@ -54,28 +49,57 @@ jobs:
             mt6771-moto-overlay-lima-evt1.dts \
             mt6771-moto-overlay-lima-evt2.dts
           do
-            target=$(git ls-tree HEAD "arch/arm/boot/dts/$file" | awk '{print $4}' | sed 's/^.* -> //')
+            link="arch/arm/boot/dts/$file"
 
-            if [ -n "$target" ]; then
-              echo "=== $file -> $target ==="
+            echo
+            echo ">>> $link"
 
-              target_path="arch/arm/boot/dts/$target"
+            target=$(git ls-tree HEAD "$link" | sed 's/.* -> //')
 
-              if git cat-file -e "HEAD:$target_path" 2>/dev/null; then
-                mkdir -p "../lima-source/$(dirname "$target_path")"
-                git archive HEAD "$target_path" | tar -x -C ../lima-source
-              else
-                echo "TARGET NOT FOUND: $target_path"
-              fi
+            if [ -z "$target" ]; then
+              echo "NOT A SYMLINK OR NOT FOUND"
+              continue
+            fi
+
+            echo "target: $target"
+
+            real=$(realpath -m "$(dirname "$link")/$target")
+
+            echo "resolved: $real"
+
+            if git cat-file -e "HEAD:$real" 2>/dev/null; then
+              echo "BLOB FOUND"
+
+              mkdir -p "../lima-source/$(dirname "$real")"
+
+              git show "HEAD:$real" \
+                > "../lima-source/$real"
+
+              echo "EXTRACTED: $real"
+            else
+              echo "!!! TARGET BLOB NOT FOUND: $real !!!"
             fi
           done
 
-          echo "=== EXTRACTED FILES ==="
-          find ../lima-source -type f -o -type l | sort
+          echo
+          echo "=== SEARCHING ADDITIONAL LIMA FILES ==="
 
-      - name: Package extracted sources
+          git ls-tree -r HEAD --name-only \
+            | grep -Ei 'mt6771.*lima|lima.*mt6771' \
+            | while read -r path; do
+                echo "$path"
+              done
+
+          echo
+          echo "=== EXTRACTED FILES ==="
+          find ../lima-source -type f -printf '%p (%s bytes)\n' | sort
+
+      - name: Package Lima sources
         run: |
-          tar -czhf lima-source.tar.gz lima-source
+          tar -czf lima-source.tar.gz lima-source
+
+          echo "=== TAR CONTENTS ==="
+          tar -tzf lima-source.tar.gz | grep -Ei 'mt6771|lima|arm64' || true
 
       - name: Upload Lima source
         uses: actions/upload-artifact@v4
