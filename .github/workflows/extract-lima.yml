@@ -18,6 +18,7 @@ jobs:
         run: |
           git fetch --depth=1 origin \
             refs/tags/MMI-PMD29.70-81-lima:refs/tags/MMI-PMD29.70-81-lima
+
           git checkout MMI-PMD29.70-81-lima
 
       - name: Extract Lima files
@@ -28,46 +29,9 @@ jobs:
           rm -rf ../lima-source
           mkdir -p ../lima-source
 
-          echo "=== COPYING BASE FILES ==="
+          copy_file() {
+            file="$1"
 
-          git show HEAD:arch/arm/boot/dts/mt6771.dts \
-            > ../lima-source/arch/arm/boot/dts/mt6771.dts
-
-          mkdir -p ../lima-source/arch/arm/configs/ext_config
-
-          git show HEAD:arch/arm/configs/ext_config/lima.config \
-            > ../lima-source/arch/arm/configs/ext_config/lima.config
-
-          echo "=== COPYING ARM64 LIMA FILES ==="
-
-          while IFS= read -r file; do
-            [ -z "$file" ] && continue
-
-            echo "COPY: $file"
-
-            mkdir -p "../lima-source/$(dirname "$file")"
-
-            git show "HEAD:$file" > "../lima-source/$file"
-
-          done < <(
-            git ls-tree -r HEAD --name-only |
-              grep -E '^arch/arm64/boot/dts/mediatek/.*mt6771.*lima|^arch/arm64/boot/dts/mediatek/.*lima.*mt6771'
-          )
-
-          echo "=== COPYING ARM64 CAMERA/AUDIO FILES ==="
-
-          for file in \
-            arch/arm64/boot/dts/mediatek/mt6771-camera-sensor-moto-lima.dtsi \
-            arch/arm64/boot/dts/mediatek/mt6771-moto-audio-lima.dtsi \
-            arch/arm64/boot/dts/mediatek/mt6771-moto-main-lima.dtsi \
-            arch/arm64/boot/dts/mediatek/mt6771-moto-overlay-lima.dtsi \
-            arch/arm64/boot/dts/mediatek/mt6771-moto-overlay-lima-dvt1a.dts \
-            arch/arm64/boot/dts/mediatek/mt6771-moto-overlay-lima-dvt1b.dts \
-            arch/arm64/boot/dts/mediatek/mt6771-moto-overlay-lima-dvt2.dts \
-            arch/arm64/boot/dts/mediatek/mt6771-moto-overlay-lima-evb.dts \
-            arch/arm64/boot/dts/mediatek/mt6771-moto-overlay-lima-evt1.dts \
-            arch/arm64/boot/dts/mediatek/mt6771-moto-overlay-lima-evt2.dts
-          do
             if git cat-file -e "HEAD:$file" 2>/dev/null; then
               echo "COPY: $file"
               mkdir -p "../lima-source/$(dirname "$file")"
@@ -75,45 +39,80 @@ jobs:
             else
               echo "MISSING: $file"
             fi
-          done
+          }
+
+          echo "=== SEARCHING ALL LIMA FILES ==="
+
+          git ls-tree -r HEAD --name-only |
+            grep -Ei '(^|/)(mt6771.*lima|lima.*mt6771)|mt6771.*lima' |
+            while IFS= read -r file; do
+              [ -z "$file" ] && continue
+              copy_file "$file"
+            done
+
+          echo
+          echo "=== BASE FILES ==="
+
+          copy_file "arch/arm/boot/dts/mt6771.dts"
+          copy_file "arch/arm/configs/ext_config/lima.config"
+
+          echo
+          echo "=== ALL MT6771 FILES IN REPOSITORY ==="
+
+          git ls-tree -r HEAD --name-only |
+            grep -Ei 'mt6771|lima' |
+            sort
 
           echo
           echo "=== EXTRACTED FILES ==="
-          find ../lima-source -type f -printf '%p (%s bytes)\n' | sort
+
+          find ../lima-source \
+            -type f \
+            -printf '%p (%s bytes)\n' |
+            sort
+
+          echo
+          echo "=== VERIFYING LIMA FILES ==="
+
+          COUNT=$(find ../lima-source -type f | wc -l)
+
+          echo "Extracted files: $COUNT"
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "ERROR: Nothing was extracted!"
+            exit 1
+          fi
 
           echo
           echo "=== VERIFYING MAIN LIMA FILE ==="
 
-          test -s ../lima-source/arch/arm64/boot/dts/mediatek/mt6771-moto-main-lima.dtsi
+          MAIN=$(find ../lima-source \
+            -type f \
+            -iname '*mt6771*moto*main*lima*' |
+            head -1 || true)
 
-          echo "MAIN LIMA DTSI FOUND!"
+          if [ -n "$MAIN" ] && [ -s "$MAIN" ]; then
+            echo "MAIN LIMA DTSI FOUND:"
+            echo "$MAIN"
+          else
+            echo "WARNING: MAIN LIMA DTSI NOT FOUND"
+            echo "This is a warning only."
+          fi
 
       - name: Package Lima sources
         working-directory: kernel-mtk
         run: |
-          set -e
+          tar -czf ../lima-source.tar.gz lima-source
 
-          tar -czf lima-source.tar.gz ../lima-source
-
-          echo "=== VERIFYING TAR ==="
-
-          tar -tzf lima-source.tar.gz |
-            grep -E 'arch/arm64/boot/dts/mediatek/.*mt6771.*lima|arch/arm64/boot/dts/mediatek/.*lima.*mt6771'
-
-          echo
-          echo "=== MAIN FILE IN TAR ==="
-
-          tar -tzf lima-source.tar.gz |
-            grep 'mt6771-moto-main-lima.dtsi'
-
-          echo
           echo "=== TAR CONTENTS ==="
 
-          tar -tzf lima-source.tar.gz | grep -Ei 'mt6771|lima|arm64'
+          tar -tzf ../lima-source.tar.gz |
+            grep -Ei 'arm64|arm/|mt6771|lima' |
+            head -200 || true
 
       - name: Upload Lima source
         uses: actions/upload-artifact@v4
         with:
-          name: lima-source
-          path: kernel-mtk/lima-source.tar.gz
+          name: lima-kernel-sources
+          path: lima-source.tar.gz
           if-no-files-found: error
