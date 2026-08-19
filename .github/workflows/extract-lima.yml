@@ -102,7 +102,7 @@ jobs:
       - name: Package Lima sources
         working-directory: kernel-mtk
         run: |
-          tar -czf ../lima-source.tar.gz lima-source
+          tar -czf ../lima-source.tar.gz -C .. lima-source
 
           echo "=== TAR CONTENTS ==="
 
