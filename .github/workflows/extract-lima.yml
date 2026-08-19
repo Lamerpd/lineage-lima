@@ -18,8 +18,18 @@ jobs:
         run: |
           git fetch --depth=1 origin \
             refs/tags/MMI-PMD29.70-81-lima:refs/tags/MMI-PMD29.70-81-lima
-
           git checkout MMI-PMD29.70-81-lima
+
+      - name: Inspect Lima tree
+        working-directory: kernel-mtk
+        run: |
+          echo "=== LIMA / MT6771 FILES ==="
+          git ls-tree -r --name-only HEAD | grep -Ei 'lima|mt6771' | sort
+
+          echo "=== LIMA DTS INCLUDES ==="
+          git grep -nE '#include.*(lima|mt6771|cust|bat_setting)' HEAD -- \
+            'arch/arm/boot/dts/*' \
+            'arch/arm64/boot/dts/*' 2>/dev/null || true
 
       - name: Extract Lima files
         working-directory: kernel-mtk
@@ -27,30 +37,12 @@ jobs:
           mkdir -p ../lima-source
 
           git archive HEAD \
-            arch/arm/boot/dts/mt6771-moto-main-lima.dtsi \
-            arch/arm/boot/dts/mt6771-moto-overlay-lima.dtsi \
-            arch/arm/boot/dts/mt6771-moto-overlay-lima-dvt1a.dts \
-            arch/arm/boot/dts/mt6771-moto-overlay-lima-dvt1b.dts \
-            arch/arm/boot/dts/mt6771-moto-overlay-lima-dvt2.dts \
-            arch/arm/boot/dts/mt6771-moto-overlay-lima-evb.dts \
-            arch/arm/boot/dts/mt6771-moto-overlay-lima-evt1.dts \
-            arch/arm/boot/dts/mt6771-moto-overlay-lima-evt2.dts \
-            arch/arm/boot/dts/mt6771.dts \
-            arch/arm/configs/ext_config/lima.config \
+            arch/arm/boot/dts \
+            arch/arm/configs/ext_config \
             | tar -x -C ../lima-source
 
-      - name: Search Lima build configuration
-        working-directory: kernel-mtk
-        run: |
-          echo "=== LIMA CONFIG REFERENCES ==="
-          git grep -n -i 'lima.config' HEAD -- \
-            'Makefile' 'arch/*' 'scripts/*' 2>/dev/null || true
-
-          echo "=== LIMA DEFCONFIG REFERENCES ==="
-          git grep -n -i 'lima' HEAD -- 'arch/arm/configs/*' | head -n 100 || true
-
-          echo "=== KERNEL VERSION ==="
-          git show HEAD:Makefile | grep -E '^VERSION|^PATCHLEVEL|^SUBLEVEL' | head
+          echo "=== EXTRACTED FILES ==="
+          find ../lima-source -type f | sort
 
       - name: Package extracted sources
         run: |
