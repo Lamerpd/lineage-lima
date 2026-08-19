@@ -1,0 +1,63 @@
+name: Extract Lima Kernel Sources
+
+on:
+  workflow_dispatch:
+
+jobs:
+  extract:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Clone kernel repository
+        run: |
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/MotorolaMobilityLLC/kernel-mtk.git kernel-mtk
+
+      - name: Checkout Lima tag
+        working-directory: kernel-mtk
+        run: |
+          git fetch --depth=1 origin \
+            refs/tags/MMI-PMD29.70-81-lima:refs/tags/MMI-PMD29.70-81-lima
+
+          git checkout MMI-PMD29.70-81-lima
+
+      - name: Extract Lima files
+        working-directory: kernel-mtk
+        run: |
+          mkdir -p ../lima-source
+
+          git archive HEAD \
+            arch/arm/boot/dts/mt6771-moto-main-lima.dtsi \
+            arch/arm/boot/dts/mt6771-moto-overlay-lima.dtsi \
+            arch/arm/boot/dts/mt6771-moto-overlay-lima-dvt1a.dts \
+            arch/arm/boot/dts/mt6771-moto-overlay-lima-dvt1b.dts \
+            arch/arm/boot/dts/mt6771-moto-overlay-lima-dvt2.dts \
+            arch/arm/boot/dts/mt6771-moto-overlay-lima-evb.dts \
+            arch/arm/boot/dts/mt6771-moto-overlay-lima-evt1.dts \
+            arch/arm/boot/dts/mt6771-moto-overlay-lima-evt2.dts \
+            arch/arm/boot/dts/mt6771.dts \
+            arch/arm/configs/ext_config/lima.config \
+            | tar -x -C ../lima-source
+
+      - name: Search Lima build configuration
+        working-directory: kernel-mtk
+        run: |
+          echo "=== LIMA CONFIG REFERENCES ==="
+          git grep -n -i 'lima.config' HEAD -- \
+            'Makefile' 'arch/*' 'scripts/*' 2>/dev/null || true
+
+          echo "=== LIMA DEFCONFIG REFERENCES ==="
+          git grep -n -i 'lima' HEAD -- 'arch/arm/configs/*' | head -n 100 || true
+
+          echo "=== KERNEL VERSION ==="
+          git show HEAD:Makefile | grep -E '^VERSION|^PATCHLEVEL|^SUBLEVEL' | head
+
+      - name: Package extracted sources
+        run: |
+          tar -czf lima-source.tar.gz lima-source
+
+      - name: Upload Lima source
+        uses: actions/upload-artifact@v4
+        with:
+          name: lima-kernel-sources
+          path: lima-source.tar.gz
