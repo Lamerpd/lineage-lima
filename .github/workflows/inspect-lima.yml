@@ -1,0 +1,32 @@
+name: Inspect Lima Kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone kernel repository
+        run: |
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/MotorolaMobilityLLC/kernel-mtk.git kernel-mtk
+
+      - name: Inspect Lima tag
+        working-directory: kernel-mtk
+        run: |
+          echo "=== TAG ==="
+          git show-ref --tags | grep 'MMI-PMD29.70-81-lima' || true
+
+          echo
+          echo "=== TAG COMMIT ==="
+          git rev-list -n 1 'MMI-PMD29.70-81-lima' || true
+
+          echo
+          echo "=== TAG INFO ==="
+          git show --no-patch --decorate --stat 'MMI-PMD29.70-81-lima' || true
+
+          echo
+          echo "=== TREE MT6771 ==="
+          git ls-tree -r --name-only 'MMI-PMD29.70-81-lima' | grep -Ei 'mt6771|lima' | head -n 200 || true
