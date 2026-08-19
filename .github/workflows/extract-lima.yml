@@ -20,36 +20,14 @@ jobs:
             refs/tags/MMI-PMD29.70-81-lima:refs/tags/MMI-PMD29.70-81-lima
           git checkout MMI-PMD29.70-81-lima
 
-      - name: Inspect Lima tree
+      - name: Find Lima files
         working-directory: kernel-mtk
         run: |
-          echo "=== LIMA / MT6771 FILES ==="
-          git ls-tree -r --name-only HEAD | grep -Ei 'lima|mt6771' | sort
+          echo "=== LIMA FILES ==="
+          git ls-tree -r HEAD --name-only | grep -Ei 'mt6771.*lima|lima.*mt6771' || true
 
-          echo "=== LIMA DTS INCLUDES ==="
-          git grep -nE '#include.*(lima|mt6771|cust|bat_setting)' HEAD -- \
-            'arch/arm/boot/dts/*' \
-            'arch/arm64/boot/dts/*' 2>/dev/null || true
+          echo "=== LIMA SYMLINKS ==="
+          find arch/arm/boot/dts -maxdepth 1 -type l -name '*lima*' -exec ls -l {} \; || true
 
-      - name: Extract Lima files
-        working-directory: kernel-mtk
-        run: |
-          mkdir -p ../lima-source
-
-          git archive HEAD \
-            arch/arm/boot/dts \
-            arch/arm/configs/ext_config \
-            | tar -x -C ../lima-source
-
-          echo "=== EXTRACTED FILES ==="
-          find ../lima-source -type f | sort
-
-      - name: Package extracted sources
-        run: |
-          tar -czf lima-source.tar.gz lima-source
-
-      - name: Upload Lima source
-        uses: actions/upload-artifact@v4
-        with:
-          name: lima-kernel-sources
-          path: lima-source.tar.gz
+          echo "=== ARM64 TARGETS ==="
+          git ls-tree -r HEAD --name-only | grep 'arch/arm64/boot/dts/mediatek/.*lima' || true
