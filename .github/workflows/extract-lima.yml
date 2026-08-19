@@ -20,7 +20,7 @@ jobs:
             refs/tags/MMI-PMD29.70-81-lima:refs/tags/MMI-PMD29.70-81-lima
           git checkout MMI-PMD29.70-81-lima
 
-      - name: Find Lima files
+      - name: Inspect Lima tree
         working-directory: kernel-mtk
         run: |
           echo "=== LIMA FILES ==="
@@ -31,3 +31,54 @@ jobs:
 
           echo "=== ARM64 TARGETS ==="
           git ls-tree -r HEAD --name-only | grep 'arch/arm64/boot/dts/mediatek/.*lima' || true
+
+      - name: Extract Lima files
+        working-directory: kernel-mtk
+        run: |
+          mkdir -p ../lima-source
+
+          git archive HEAD \
+            arch/arm/boot/dts/mt6771.dts \
+            arch/arm/configs/ext_config/lima.config \
+            | tar -x -C ../lima-source
+
+          echo "=== RESOLVING LIMA SYMLINK TARGETS ==="
+
+          for file in \
+            mt6771-moto-main-lima.dtsi \
+            mt6771-moto-overlay-lima.dtsi \
+            mt6771-moto-overlay-lima-dvt1a.dts \
+            mt6771-moto-overlay-lima-dvt1b.dts \
+            mt6771-moto-overlay-lima-dvt2.dts \
+            mt6771-moto-overlay-lima-evb.dts \
+            mt6771-moto-overlay-lima-evt1.dts \
+            mt6771-moto-overlay-lima-evt2.dts
+          do
+            target=$(git ls-tree HEAD "arch/arm/boot/dts/$file" | awk '{print $4}' | sed 's/^.* -> //')
+
+            if [ -n "$target" ]; then
+              echo "=== $file -> $target ==="
+
+              target_path="arch/arm/boot/dts/$target"
+
+              if git cat-file -e "HEAD:$target_path" 2>/dev/null; then
+                mkdir -p "../lima-source/$(dirname "$target_path")"
+                git archive HEAD "$target_path" | tar -x -C ../lima-source
+              else
+                echo "TARGET NOT FOUND: $target_path"
+              fi
+            fi
+          done
+
+          echo "=== EXTRACTED FILES ==="
+          find ../lima-source -type f -o -type l | sort
+
+      - name: Package extracted sources
+        run: |
+          tar -czhf lima-source.tar.gz lima-source
+
+      - name: Upload Lima source
+        uses: actions/upload-artifact@v4
+        with:
+          name: lima-kernel-sources
+          path: lima-source.tar.gz
